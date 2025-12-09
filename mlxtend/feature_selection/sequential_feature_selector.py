@@ -5,6 +5,8 @@
 # Author: Sebastian Raschka <sebastianraschka.com>
 #
 # License: BSD 3 clause
+# temporary change to trigger git detection
+
 
 import datetime
 import sys
