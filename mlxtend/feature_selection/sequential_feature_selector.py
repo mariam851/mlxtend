@@ -194,10 +194,12 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
         n_jobs=1,
         pre_dispatch="2*n_jobs",
         clone_estimator=True,
+        tol=None, # Added: Option for early termination criterion with tolerance
         fixed_features=None,
         feature_groups=None,
     ):
         self.estimator = estimator
+        self.tol=tol # Added: Store the tolerance value
         self.k_features = k_features
         self.forward = forward
         self.floating = floating
@@ -528,6 +530,15 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
                 "cv_scores": k_score,
                 "avg_score": np.nanmean(k_score),
             }
+            
+        # Added: Initialization and basic validation for the 'tol' criterion ---
+        best_avg_score = -np.inf
+        if k > 0:
+            #Initialize best_avg_score with the score of the initial subset (if k > 0)
+            best_avg_score = self.subsets_[k]["avg_score"]
+        
+        if self.tol is not None and self.tol < 0.0:
+            raise AttributeError("Tolerance 'tol' must be non-negative.")
 
         orig_set = set(range(self.k_ub))
         try:
@@ -560,6 +571,23 @@ class SequentialFeatureSelector(_BaseXComposition, MetaEstimatorMixin):
                         "cv_scores": cv_scores,
                         "avg_score": k_score,
                     }
+                    # Added: Update the overall best score achieved so far
+                    if k_score > best_avg_score:
+                        best_avg_score = k_score
+                    
+                # --- Added: Early stopping check based on 'tol' criterion ---
+                if self.tol is not None and self.tol >= 0.0:
+                    # Termination if the current best score (k_score) is not significantly better 
+                    # than the overall best score (best_avg_score) by more than 'tol'.
+                    # This implies that the improvement is marginal.
+                    if (best_avg_score - k_score) <= self.tol:
+                        if self.verbose > 0:
+                            sys.stderr.write(
+                                "\n[%s] Early stopping criterion met (current score within tol of best score)..." 
+                                % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            )
+                        # Set k = k_stop to terminate the main loop
+                        k = k_stop
 
                 if self.floating:
                     # floating direction is opposite of self.forward, i.e. in
